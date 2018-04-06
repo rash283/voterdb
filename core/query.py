@@ -103,11 +103,11 @@ def get_mailing_addresses_rep_prim(engine):
     df2 = df2.dropna(subset=['street'])
     df2['address'] = ''
     df2['street1'] = ''
-    parts = [8,9,10,11]
+    parts = ['pre', 'streetname', 'streettype', 'post']
     for row in df2.itertuples():
         rowdict = row._asdict()
         df2.loc[row.Index, 'address'] = f'{row.street}, {row.city}, {row.state}, {row.zip[:5]}'
-        df2.loc[row.Index, 'street1'] = ' '.join([str(row[part]) for part in parts if row[part]])
+        df2.loc[row.Index, 'street1'] = ' '.join([str(rowdict[part]) for part in parts if rowdict[part]])
     pattern = r' I{2,3}| JR| SR| IV'
     df['last_name_stripped'] = df.last_name.str.rstrip(pattern)
 
