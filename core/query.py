@@ -1,5 +1,6 @@
 from core.database import engine
-from core.tables import voters_in_process, address_in_process, normal_address, oldham_roads, normal_address_mailing, voters, mailing_addresses
+from core.tables import voters_in_process, address_in_process, normal_address, oldham_roads, normal_address_mailing, \
+     voters, mailing_addresses, addresses
 from sqlalchemy import select, alias, text, distinct, and_
 from sqlalchemy.sql import func
 import difflib
@@ -77,34 +78,56 @@ def get_mailing_addresses(engine):
 
 
 def get_mailing_addresses_rep_prim(engine):
+    j = voters.join(mailing_addresses)
+    j1 = voters.join(normal_address_mailing)
+    stmt = select([mailing_addresses]).select_from(j).where(
+        and_(voters.c.party == 'R', voters.c.primary_sum >= 2))
+    stmt1 = select([normal_address_mailing]).select_from(j1).where(
+        and_(voters.c.party == 'R', voters.c.primary_sum >= 2))
     with engine.connect() as con:
-        j = voters.join(mailing_addresses)
-        stmt = select([mailing_addresses]).select_from(j).where(and_(voters.c.party == 'R', voters.c.primary_sum >= 2))
         results = con.execute(stmt).fetchall()
-        df = pd.DataFrame(results, columns=['id', 'first_name', 'last_name', 'street', 'city', 'state', 'zip'])
-        df.index = df['id']
-        del(df['id'])
-        df['address'] = ''
-        for row in df.itertuples():
-            df.loc[row.Index, 'address'] = f'{row.street}, {row.city}, {row.state}, {row.zip[:5]}'
-        pattern = r' I{2,3}| JR| SR| IV'
-        df['last_name_stripped'] = df.last_name.str.rstrip(pattern)
-        with open('mailing_addys.csv', 'w') as file:
-            for addy in df.address.unique():
-                family = df[df.address == addy]
-                num = len(family)
-                if num == 1:
-                    name = ' '.join(family[['first_name', 'last_name']].values[0])
-                    line = f'"{addy}",{name}\n'
-                elif len(family.last_name_stripped.unique()) == 1:
-                    last_name = family.last_name_stripped.values[0]
-                    first_names = ', '.join(family.first_name.values)
-                    line = f'"{addy}",,"{first_names}","{last_name}"\n'
-                else:
-                    names = []
-                    for person in family[['first_name', 'last_name']].values:
-                        names.append(' '.join(person))
-                    names = ', '.join(names)
-                    line = f'"{addy}",{names},,\n'
-                file.writelines(line)
+        results1 = con.execute(stmt1).fetchall()
+    df = pd.DataFrame(results, columns=['id', 'first_name', 'last_name', 'street', 'city', 'state', 'zip'])
+    df.index = df['id']
+    del(df['id'])
+    df['street'] = df['street'].str.replace(r'P\.?\s?O\.?\s?BOX\s+(\d+)', r'P.O. BOX \1')
+    df1 = pd.DataFrame(results1, columns=['addr_num', 'pre', 'streetname', 'streettype', 'post', 'internal',
+                                          'city1', 'state1', 'zip1', 'parsed', 'zip4', 'aplhanum', 'voter_id'])
+    df1 = df1.dropna(subset=['addr_num'])
+    df1['addr_num'] = df1['addr_num'].astype('int')
+    df1.index = df1['voter_id']
+    del(df1['voter_id'])
+    df1.loc[df1.streettype == 'HWY', ['streetname', 'streettype']] = df1.loc[df1.streettype == 'HWY', ['streettype', 'streetname']].values
+    df2 = pd.merge(df, df1, left_index=True, right_index=True)
+    df2.loc[df2['street'] == '0', 'street'] = None
+    df2 = df2.dropna(subset=['street'])
+    df2['address'] = ''
+    df2['street1'] = ''
+    parts = [8,9,10,11]
+    for row in df2.itertuples():
+        rowdict = row._asdict()
+        df2.loc[row.Index, 'address'] = f'{row.street}, {row.city}, {row.state}, {row.zip[:5]}'
+        df2.loc[row.Index, 'street1'] = ' '.join([str(row[part]) for part in parts if row[part]])
+    pattern = r' I{2,3}| JR| SR| IV'
+    df['last_name_stripped'] = df.last_name.str.rstrip(pattern)
+
+    with open('mailing_addys.csv', 'w') as file:
+        for addy in df.address.unique():
+            family = df[df.address == addy]
+            num = len(family)
+            if num == 1:
+                name = ' '.join(family[['first_name', 'last_name']].values[0])
+                line = f'"{addy}",{name}\n'
+            elif len(family.last_name_stripped.unique()) == 1:
+                last_name = family.last_name_stripped.values[0]
+                first_names = ', '.join(family.first_name.values)
+                line = f'"{addy}",,"{first_names}","{last_name}"\n'
+            else:
+                names = []
+                for person in family[['first_name', 'last_name']].values:
+                    names.append(' '.join(person))
+                names = ', '.join(names)
+                line = f'"{addy}",{names},,\n'
+            file.writelines(line)
+
 
