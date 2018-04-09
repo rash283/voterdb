@@ -1,6 +1,7 @@
 from core.database import engine
 from core.tables import voters_in_process, address_in_process, normal_address, oldham_roads, normal_address_mailing, \
-     voters, mailing_addresses, addresses
+     voters, mailing_addresses
+from core.funcs import load_reference_street, clean_streets
 from sqlalchemy import select, alias, text, distinct, and_
 from sqlalchemy.sql import func
 import difflib
@@ -44,7 +45,7 @@ def geocode():
     FROM geocode(:addy, 1) AS g;""")
 
 
-def distinct_streets_oldham(engine):
+def distinct_streets_oldham():
     with engine.connect() as con:
         stmt = select([oldham_roads.c.fullname], distinct=True)
         results = con.execute(stmt).fetchall()
@@ -52,7 +53,7 @@ def distinct_streets_oldham(engine):
     return streets
 
 
-def current_streets(engine):
+def current_streets():
     with engine.connect() as con:
         stmt = select([normal_address.c.streetname, normal_address.c.streettypeabbrev], distinct=True)
         results = con.execute(stmt).fetchall()
@@ -129,5 +130,13 @@ def get_mailing_addresses_rep_prim(engine):
                 names = ', '.join(names)
                 line = f'"{addy}",{names},,\n'
             file.writelines(line)
+
+
+def clean_mailing_streets():
+    with engine.connect() as con:
+        results = con.execute(select([mailing_addresses])).fetchall()
+    df = pd.DataFrame(results, columns=results[0].keys())
+    streets = [street for street in df.name.unique() if street]
+    ref_street = load_reference_street()
 
 
