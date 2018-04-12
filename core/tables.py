@@ -13,14 +13,19 @@ with warnings.catch_warnings():
     # address_in_process = Table('address_in_process', meta, schema='public', autoload=True, autoload_with=engine)
     # addresses = Table('addresses', meta, schema='public', autoload=True, autoload_with=engine)
     # voters = Table('voters', meta, schema='public', autoload=True, autoload_with=engine)
-    # votinghistories = Table('votinghistories', meta, schema='public', autoload=True, autoload_with=engine)
+    # voting_history = Table('voting_history', meta, schema='public', autoload=True, autoload_with=engine)
     # residence_in_process = Table('residence_in_process', meta, schema='public', autoload=True, autoload_with=engine)
 
     oldham_roads = meta.tables['public.oldham_roads']
     us_lex = meta.tables['public.us_lex']
     us_gaz = meta.tables['public.us_gaz']
     us_rules = meta.tables['public.us_rules']
-    # voters = meta.tables['public.voters']
+    voters = meta.tables['public.voters']
+    voting_history = meta.tables['public.voting_history']
+    mailing_in_process = meta.tables['public.mailing_address_in_process']
+    mailing_std = meta.tables['public.mailing_std_addy']
+    residence_std = meta.tables['public.residence_std_addy']
+    residence_in_process = meta.tables['public.residence_address_in_process']
     # voter_in_process = meta.tables['public.voter_in_process']
     # tiger_geocode_settings = meta.tables['tiger.geocode_settings']
     # tiger_geocode_settings_default = meta.tables['tiger.geocode_settings_default']

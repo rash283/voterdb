@@ -1,8 +1,7 @@
 import pandas as pd
-from datetime import datetime, date
+from datetime import date
 from collections import OrderedDict
 from core.database import engine
-import difflib
 from core.funcs import load_reference_cities, load_reference_street, clean_cities
 
 
