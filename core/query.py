@@ -1,11 +1,11 @@
 from core.database import engine
-from core.tables import voters, mailing_in_process, residence_in_process, oldham_roads, voting_history, mailing_std
-from core.funcs import load_reference_street
+from core.tables import voters, mailing_in_process, residence_in_process, oldham_roads, voting_history, mailing_std, \
+    mailing_parsed
+from core.funcs import load_reference_street, clean_streets
 from sqlalchemy import select, alias, text, and_, bindparam
 from sqlalchemy.sql import text
 from sqlalchemy.sql import func
 import pandas as pd
-
 
 
 def geocode():
@@ -18,33 +18,52 @@ def distinct_streets_oldham():
     with engine.connect() as con:
         stmt = select([oldham_roads.c.fullname], distinct=True)
         results = con.execute(stmt).fetchall()
-        streets = [street[0] for street in results if street[0]]
+        streets = [street[0].upper() for street in results if street[0]]
     return streets
+
+
+def get_mailing_addys_to_clean():
+    j = voters.join(mailing_in_process)
+    stmt = select([mailing_in_process]).select_from(j).where(
+        and_(voters.c.Party == 'R', voters.c.primary_sum >= 2))
+    with engine.connect() as con:
+        results = con.execute(stmt).fetchall()
+    df = pd.DataFrame(results, columns=['id', 'first_name', 'last_name', 'street', 'city',
+                                        'state', 'zip', 'macro', 'full_address'])
+    df.index = df['id']
+    del (df['id'])
+    df['street'] = df['street'].str.replace(r'P\.?\s?O\.?\s?BOX\s+(\d+)', r'P.O. BOX \1')
 
 
 def get_mailing_addresses_rep_prim():
     j = voters.join(mailing_in_process)
     j1 = voters.join(mailing_std)
+
     stmt = select([mailing_in_process]).select_from(j).where(
         and_(voters.c.Party == 'R', voters.c.primary_sum >= 2))
     stmt1 = select([mailing_std]).select_from(j1).where(
         and_(voters.c.Party == 'R', voters.c.primary_sum >= 2))
+
     with engine.connect() as con:
         results = con.execute(stmt).fetchall()
         results1 = con.execute(stmt1).fetchall()
-    df = pd.DataFrame(results, columns=['id', 'first_name', 'last_name', 'street', 'city', 'state', 'zip', 'macro'])
+
+    df = pd.DataFrame(results, columns=['id', 'first_name', 'last_name', 'street', 'city',
+                                        'state', 'zip', 'macro', 'full_address'])
     df.index = df['id']
-    del(df['id'])
+    del (df['id'])
     df['street'] = df['street'].str.replace(r'P\.?\s?O\.?\s?BOX\s+(\d+)', r'P.O. BOX \1')
     df1 = pd.DataFrame(results1, columns=results1[0].keys())
     df1.index = df1['index']
-    del(df1['index'])
+    del (df1['index'])
     for k in df1.columns:
         if df1[k].isnull().all():
             del (df1[k])
     df2 = pd.merge(df, df1, left_index=True, right_index=True)
     df2.loc[df2['street'] == '0', 'street'] = None
     df2 = df2.dropna(subset=['street'])
+    grouped  = df2.groupby('street')
+
     # I left off here
     df2['address'] = ''
     df2['street1'] = ''
@@ -78,10 +97,12 @@ def get_mailing_addresses_rep_prim():
 
 def clean_mailing_streets():
     with engine.connect() as con:
-        results = con.execute(select([mailing_in_process])).fetchall()
+        results = con.execute(select([mailing_parsed])).fetchall()
     df = pd.DataFrame(results, columns=results[0].keys())
-    streets = [street for street in df.name.unique() if street]
-    ref_street = load_reference_street()
+    streets = [street for street in df.name.unique() if street and not street.startswith('1/2')]
+    ref_street = distinct_streets_oldham()
+    errors = [street for street in streets if street not in ref_street]
+    scrubbed, needs_work = clean_streets(errors, ref_street)
 
 
 def update_voter_score():
@@ -102,3 +123,8 @@ def update_voter_score():
         .values(general_sum=bindparam('general_sum'))
     with engine.connect() as con:
         results = con.execute(stmt, gs)
+
+
+def update_full_address():
+    stmt = mailing_in_process.update().where(mailing_in_process.c.index == bindparam('voter_id')) \
+        .values(full_address=bindparam('full_address'))
