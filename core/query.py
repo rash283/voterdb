@@ -6,41 +6,17 @@ from sqlalchemy import select, alias, text, and_, bindparam
 from sqlalchemy.sql import text
 from sqlalchemy.sql import func
 import pandas as pd
-
-
-def geocode():
-    s = text(
-        """SELECT g.rating, g.geomout
-    FROM geocode(:addy, 1) AS g;""")
-
-
-def distinct_streets_oldham():
-    with engine.connect() as con:
-        stmt = select([oldham_roads.c.fullname], distinct=True)
-        results = con.execute(stmt).fetchall()
-        streets = [street[0].upper() for street in results if street[0]]
-    return streets
-
-
-def get_mailing_addys_to_clean():
-    j = voters.join(mailing_in_process)
-    stmt = select([mailing_in_process]).select_from(j).where(
-        and_(voters.c.Party == 'R', voters.c.primary_sum >= 2))
-    with engine.connect() as con:
-        results = con.execute(stmt).fetchall()
-    df = pd.DataFrame(results, columns=['id', 'first_name', 'last_name', 'street', 'city',
-                                        'state', 'zip', 'macro', 'full_address'])
-    df.index = df['id']
-    del (df['id'])
-    df['street'] = df['street'].str.replace(r'P\.?\s?O\.?\s?BOX\s+(\d+)', r'P.O. BOX \1')
+import numpy as np
 
 
 def get_mailing_addresses_rep_prim():
     j = voters.join(mailing_in_process)
     j1 = voters.join(mailing_std)
-
-    stmt = select([mailing_in_process]).select_from(j).where(
-        and_(voters.c.Party == 'R', voters.c.primary_sum >= 2))
+    stmt = select([mailing_in_process.c.index, mailing_in_process.c.First, mailing_in_process.c.Last,
+                   mailing_in_process.c.MailingStreet, mailing_in_process.c.MailingCity,
+                   mailing_in_process.c.MailingState, mailing_in_process.c.MailingZip, voters.c.PrecinctCode,
+                   voters.c.Party, voters.c.Sex, voters.c.DateOfBirth, voters.c.DateOfRegistration,
+                   voters.c.primary_sum]).select_from(j).where(and_(voters.c.Party == 'R', voters.c.primary_sum >= 2))
     stmt1 = select([mailing_std]).select_from(j1).where(
         and_(voters.c.Party == 'R', voters.c.primary_sum >= 2))
 
@@ -49,20 +25,27 @@ def get_mailing_addresses_rep_prim():
         results1 = con.execute(stmt1).fetchall()
 
     df = pd.DataFrame(results, columns=['id', 'first_name', 'last_name', 'street', 'city',
-                                        'state', 'zip', 'macro', 'full_address'])
+                                        'state', 'zip', 'precinct', 'party', 'sex', 'yob', 'dor', 'p_sum'])
     df.index = df['id']
     del (df['id'])
     df['street'] = df['street'].str.replace(r'P\.?\s?O\.?\s?BOX\s+(\d+)', r'P.O. BOX \1')
+    df['street'] = df['street'].str.strip()
+    df.yob = pd.to_datetime(df.yob, format='%Y')
+    # df['zip'] = df['zip'].str.slice(0, 5)
+
     df1 = pd.DataFrame(results1, columns=results1[0].keys())
     df1.index = df1['index']
     del (df1['index'])
     for k in df1.columns:
         if df1[k].isnull().all():
-            del (df1[k])
+            del(df1[k])
+
     df2 = pd.merge(df, df1, left_index=True, right_index=True)
     df2.loc[df2['street'] == '0', 'street'] = None
     df2 = df2.dropna(subset=['street'])
-    grouped  = df2.groupby('street')
+    pg = df2.groupby('precinct')
+
+
 
     # I left off here
     df2['address'] = ''
@@ -128,3 +111,24 @@ def update_voter_score():
 def update_full_address():
     stmt = mailing_in_process.update().where(mailing_in_process.c.index == bindparam('voter_id')) \
         .values(full_address=bindparam('full_address'))
+
+
+def distinct_streets_oldham():
+    with engine.connect() as con:
+        stmt = select([oldham_roads.c.fullname], distinct=True)
+        results = con.execute(stmt).fetchall()
+        streets = [street[0].upper() for street in results if street[0]]
+    return streets
+
+
+def get_mailing_addys_to_clean():
+    j = voters.join(mailing_in_process)
+    stmt = select([mailing_in_process]).select_from(j).where(
+        and_(voters.c.Party == 'R', voters.c.primary_sum >= 2))
+    with engine.connect() as con:
+        results = con.execute(stmt).fetchall()
+    df = pd.DataFrame(results, columns=['id', 'first_name', 'last_name', 'street', 'city',
+                                        'state', 'zip', 'macro', 'full_address'])
+    df.index = df['id']
+    del (df['id'])
+    df['street'] = df['street'].str.replace(r'P\.?\s?O\.?\s?BOX\s+(\d+)', r'P.O. BOX \1')
