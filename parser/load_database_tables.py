@@ -106,16 +106,19 @@ df.loc[df.MailingStreet == '7910 OREGON CREEK RD', ['ResidenceCity', 'MailingCit
 df.loc[df.DateOfRegistration.apply(lambda x: len(x)) != 8, ['DateOfRegistration']] = '01011900'
 pd.to_datetime(df.DateOfRegistration, format='%m%d%Y')
 df1 = pd.concat(voting_history, ignore_index=True)
-vh_df = df1[df1.year <= 2017]
-vh_df.to_sql('voting_history', engine, schema='public', index=False, chunksize=2000)
+vh_df = df1.loc[df1.year <= 2017]
+# vh_df.to_sql('voting_history', engine, schema='public', index=False, chunksize=2000)
 voter = df.iloc[:, [0, 1, 2, 3, 4, 5, 6, 7, 8, 17, 18]]
 voter.loc[:, 'DateOfRegistration'] = pd.to_datetime(voter.DateOfRegistration, format='%m%d%Y')
-voter.to_sql('voters', engine, schema='public', chunksize=2000)
+# voter.to_sql('voters', engine, schema='public', chunksize=2000)
 mailing_address = df.loc[:, ['First', 'Last', 'MailingStreet', 'MailingCity', 'MailingState', 'MailingZip']]
 mailing_address = mailing_address.assign(macro=lambda x: (x['MailingCity'] + ', ' + x['MailingState'] + ', ' + x['MailingZip']))
+mailing_address = mailing_address.assign(full_address=lambda x: x['MailingStreet'] + ', ' + x['MailingCity'] + ', ' + x['MailingState'] + ', ' + x['MailingZip'])
 residence_address = df.loc[:, ['First', 'Last', 'ResidenceStreet', 'ResidenceCity', 'ResidenceState', 'ResidenceZip']]
 residence_address = residence_address.assign(macro=lambda x: (
         x['ResidenceCity'] + ', ' + x['ResidenceState'] + ', ' + x['ResidenceZip']))
-mailing_address.to_sql('mailing_address_in_process', engine, schema='public', chunksize=2000)
-residence_address.to_sql('residence_address_in_process', engine, schema='public', chunksize=2000)
+residence_address = residence_address.assign(full_address=lambda x: (x['ResidenceStreet'] + ', ' +
+        x['ResidenceCity'] + ', ' + x['ResidenceState'] + ', ' + x['ResidenceZip']))
+# mailing_address.to_sql('mailing_address_in_process', engine, schema='public', chunksize=2000)
+# residence_address.to_sql('residence_address_in_process', engine, schema='public', chunksize=2000)
 
